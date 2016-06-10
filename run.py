@@ -6,9 +6,9 @@ import tpch
 import os
 import sys
 import time
-import numpy
 import dateutil.parser
 import calendar
+import statistics
 
 import sqlite3
 
@@ -156,9 +156,9 @@ def run_test(branch, revision, date):
                             if res != 0:
                                 raise Exception("Failed to execute query %s" % query)
                             times.append(end - start)
-                        result_file.write('%s-mean:%g\n' % (query, numpy.mean(times)))
-                        result_file.write('%s-std:%g\n' % (query, numpy.std(times)))
-                        print('Query %s completed in ' % query, numpy.mean(times))
+                        result_file.write('%s-mean:%g\n' % (query, statistics.mean(times)))
+                        result_file.write('%s-std:%g\n' % (query, statistics.stdev(times)))
+                        print('Query %s completed in ' % query, statistics.mean(times))
                     except:
                         result_file.write('%s-fail:execute\n' % query)
 
