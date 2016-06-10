@@ -49,7 +49,8 @@ def run_test(branch, revision, date):
     compile_parameters = monetdb.compile_parameters()
     runtime_parameters = monetdb.runtime_parameters()
 
-    result_file = open('results/%s.%s.%s' % (monetdb.name(), calendar.timegm(dt.timetuple()), revision), 'w+')
+    result_file_name = 'results/%s.%s.%s' % (monetdb.name(), calendar.timegm(dt.timetuple()), revision)
+    result_file = open(result_file_name, 'w+')
     result_file.write('database:%s\n' % monetdb.displayname())
     result_file.write('branch:%s\n' % branch)
     result_file.write('date:%s\n' % date)
@@ -161,6 +162,10 @@ def run_test(branch, revision, date):
 
     result_file.write('endbenchmark:\n')
     result_file.close()
+
+    # copy the files to the web server machine thingy
+    os.system('scp %s lab05:/export/data1/testweb/web/chronos/results' % result_file_name)
+    os.system("ssh lab05 'cd /export/data1/testweb/web/chronos && python generate.py'")
 
 initial_setup()
 
