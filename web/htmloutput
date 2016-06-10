@@ -1,0 +1,27 @@
+<tr><td><input type="checkbox" name="comparison" value="1bfd244713e3"></td>
+<td>MonetDB</td>
+<td>Fri Jun 10 09:27:20 2016 +0200</td>
+<td><a href="http://dev.monetdb.org/hg/MonetDB/rev/1bfd244713e3startbenchmark:">1bfd244713e3</a></td>
+<td>1.18</td>
+<td>0.03</td>
+<td>0.14</td>
+<td>0.1</td>
+<td>0.12</td>
+<td>0.07</td>
+<td>0.17</td>
+<td>0.08</td>
+<td>0.34</td>
+<td>0.17</td>
+<td>0.04</td>
+<td>0.14</td>
+<td>0.24</td>
+<td>0.04</td>
+<td>0.05</td>
+<td>0.13</td>
+<td>0.18</td>
+<td>0.15</td>
+<td>0.23</td>
+<td>0.1</td>
+<td>0.29</td>
+<td>0.13</td>
+</tr>

@@ -1,0 +1,6 @@
+MonetDB
+TPCH
+*.pyc
+results
+web/results
+settings.db
