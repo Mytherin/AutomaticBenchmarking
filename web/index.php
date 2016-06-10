@@ -14,6 +14,10 @@
     font-size:150%;
 }
 
+.crash{
+    color:#FF1493;
+}
+
 .better3{
     color:#32CD32;
 }

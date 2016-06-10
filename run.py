@@ -4,6 +4,7 @@ import versioncontrol
 import tpch
 
 import os
+import sys
 import time
 import numpy
 import dateutil.parser
@@ -58,68 +59,26 @@ def run_test(branch, revision, date):
     result_file.write('revision:%s\n' % rev)
     result_file.write('revisionlink:%s\n' % monetdb.revision_link(rev))
     result_file.write('startbenchmark:\n')
-    for cp in compile_parameters:
-        cp_name = cp[0]
-        cp_param = cp[1]
+    try: 
+        for cp in compile_parameters:
+            cp_name = cp[0]
+            cp_param = cp[1]
 
-        # clear previous installation
-        os.system('rm -rf %s' % compiledir)
+            # clear previous installation
+            os.system('rm -rf %s' % compiledir)
 
-        # install monetdb
-        os.chdir(sourcedir)
-        print(monetdb.compile(compiledir, cp_param))
-        res = os.system(monetdb.compile(compiledir, cp_param))
-        if res != 0:
-            raise Exception("Failed to compile MonetDB")
+            # install monetdb
+            os.chdir(sourcedir)
+            print(monetdb.compile(compiledir, cp_param))
+            res = os.system(monetdb.compile(compiledir, cp_param))
+            if res != 0:
+                raise Exception("Failed to compile MonetDB")
 
-        # clear database
-        monetdb.clear(dbpath)
+            # clear database
+            monetdb.clear(dbpath)
 
-        # start monetdb server
-        monetdb.start_database(compiledir, dbpath, '')
-
-        # wait for monetdb to start
-        success = False
-        for i in range(100):
-            res = os.system(monetdb.execute_statement(compiledir, "SELECT * FROM tables") + " &> /dev/null")
-            if res == 0:
-                success = True
-                break
-            time.sleep(1)
-
-        if not success:
-            raise Exception("Failed to start server")
-
-        # load ddl
-        res = os.system(monetdb.execute_file(compiledir, os.path.join(basedir, 'scripts', '%s.schema.sql' % monetdb.name())))
-        if res != 0:
-            raise Exception("Failed to load DDL")
-
-        # load data
-        f = open(os.path.join(basedir, 'scripts', '%s.load.sql' % monetdb.name()), 'r')
-        script = f.read()
-        f.close()
-
-        f = open('/tmp/load.sql', 'w+')
-        f.write(script.replace('_DIR_', os.path.join(basedir, 'TPCH', 'tpch', 'dbgen')))
-        f.close()
-
-        res = os.system(monetdb.execute_file(compiledir, '/tmp/load.sql'))
-        if res != 0:
-            raise Exception("Failed to load data")
-
-        monetdb.shutdown_database(compiledir)
-
-        for rp in runtime_parameters:
-            rp_name = rp[0]
-            rp_param = rp[1]
-
-            result_file.write('startresultblock:\n')
-            result_file.write('compileparameters:%s\n' % cp_name)
-            result_file.write('runtimeparameters:%s\n' % rp_name)
-            result_file.write('startresults:\n')
-
-            monetdb.start_database(compiledir, dbpath, rp_param)
+            # start monetdb server
+            monetdb.start_database(compiledir, dbpath, '')
 
             # wait for monetdb to start
             success = False
@@ -133,32 +92,92 @@ def run_test(branch, revision, date):
             if not success:
                 raise Exception("Failed to start server")
 
-            # run the actual tests
-            querydir = os.path.join(basedir, 'queries')
-            queries = os.listdir(querydir)
-            queries.sort()
-            for query in queries:
-                execute_query = monetdb.execute_file(compiledir, os.path.join(querydir, query))
-                # warmup
-                for i in range(2):
-                    res = os.system(execute_query)
-                    if res != 0:
-                        raise Exception("Failed to execute query %s" % query)
+            # load ddl
+            res = os.system(monetdb.execute_file(compiledir, os.path.join(basedir, 'scripts', '%s.schema.sql' % monetdb.name())))
+            if res != 0:
+                raise Exception("Failed to load DDL")
 
-                times = []
-                for i in range(5):
-                    start = time.time()
-                    res = os.system(execute_query)
-                    end = time.time()
-                    if res != 0:
-                        raise Exception("Failed to execute query %s" % query)
-                    times.append(end - start)
-                result_file.write('%s-mean:%g\n' % (query, numpy.mean(times)))
-                result_file.write('%s-std:%g\n' % (query, numpy.std(times)))
-                print('Query %s completed in ' % query, numpy.mean(times))
+            # load data
+            f = open(os.path.join(basedir, 'scripts', '%s.load.sql' % monetdb.name()), 'r')
+            script = f.read()
+            f.close()
+
+            f = open('/tmp/load.sql', 'w+')
+            f.write(script.replace('_DIR_', os.path.join(basedir, 'TPCH', 'tpch', 'dbgen')))
+            f.close()
+
+            res = os.system(monetdb.execute_file(compiledir, '/tmp/load.sql'))
+            if res != 0:
+                raise Exception("Failed to load data")
+
             monetdb.shutdown_database(compiledir)
-            result_file.write('endresults:\n')
-            result_file.write('endresultblock:\n')
+
+            for rp in runtime_parameters:
+                rp_name = rp[0]
+                rp_param = rp[1]
+
+                result_file.write('startresultblock:\n')
+                result_file.write('compileparameters:%s\n' % cp_name)
+                result_file.write('runtimeparameters:%s\n' % rp_name)
+                result_file.write('startresults:\n')
+
+                monetdb.start_database(compiledir, dbpath, rp_param)
+
+                # wait for monetdb to start
+                success = False
+                for i in range(100):
+                    res = os.system(monetdb.execute_statement(compiledir, "SELECT * FROM tables") + " &> /dev/null")
+                    if res == 0:
+                        success = True
+                        break
+                    time.sleep(1)
+
+                if not success:
+                    raise Exception("Failed to start server")
+
+                # run the actual tests
+                querydir = os.path.join(basedir, 'queries')
+                queries = os.listdir(querydir)
+                queries.sort()
+                for query in queries:
+                    try:
+                        execute_query = monetdb.execute_file(compiledir, os.path.join(querydir, query))
+                        # warmup
+                        for i in range(2):
+                            res = os.system(execute_query)
+                            if res != 0:
+                                raise Exception("Failed to execute query %s" % query)
+
+                        times = []
+                        for i in range(5):
+                            start = time.time()
+                            res = os.system(execute_query)
+                            end = time.time()
+                            if res != 0:
+                                raise Exception("Failed to execute query %s" % query)
+                            times.append(end - start)
+                        result_file.write('%s-mean:%g\n' % (query, numpy.mean(times)))
+                        result_file.write('%s-std:%g\n' % (query, numpy.std(times)))
+                        print('Query %s completed in ' % query, numpy.mean(times))
+                    except:
+                        result_file.write('%s-fail:execute\n' % query)
+
+                monetdb.shutdown_database(compiledir)
+                result_file.write('endresults:\n')
+                result_file.write('endresultblock:\n')
+
+    except:
+        exception_message = sys.exc_info()[1].message.lower()
+        if 'compile' in exception_message:
+            result_file.write('fail:compile\n')
+        elif 'start server' in exception_message:
+            result_file.write('fail:start\n')
+        elif 'load' in exception_message:
+            result_file.write('fail:load\n')
+        elif 'execute' in exception_message:
+            result_file.write('fail:execute\n')
+        else:
+            result_file.write('fail:unknown\n')
 
     result_file.write('endbenchmark:\n')
     result_file.close()
@@ -205,7 +224,8 @@ while True:
 
     for revision in sorted(revisions, key=lambda x: x[2]):
         run_test('default', revision[0], revision[1])
-        c.execute('UPDATE revision SET current_revision=?', (current_revision,))
+        c.execute('UPDATE revision SET currentrevision=?', (current_revision,))
+        conn.commit()
 
     time.sleep(5)
     

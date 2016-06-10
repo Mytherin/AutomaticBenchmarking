@@ -16,6 +16,8 @@ files = sorted(files);
 
 table_rows = []
 
+test_count = 22
+
 prevResults = None
 for f in files:
     inputfile = open(os.path.join('results', f), 'r')
@@ -23,6 +25,7 @@ for f in files:
     date = None
     revision = None
     revisionlink = None
+    crash = None
     benchmarks = {}
     current_benchmark = ''
     for line in inputfile:
@@ -50,47 +53,63 @@ for f in files:
             name = line.split('-std')[0]
             result = float(line.split(':')[1].strip())
             benchmarks[current_benchmark]['std'][name] = result
+        elif '-fail:' in line:
+            name = line.split('-fail')[0]
+            benchmarks[current_benchmark]['mean'][name] = -1
+            benchmarks[current_benchmark]['std'][name] = -1
+        elif 'fail:' in line:
+            crash = line.split(':')[1].strip()
+
 
     table_row = '<tr><td><input type="checkbox" name="comparison" value="%s"></td>\n' % revision
     table_row += '<td>%s</td>\n' % database
     table_row += '<td>%s</td>\n' % date
     table_row += '<td><a href="%s">%s</a></td>\n' % (revisionlink, revision)
 
-    if prevResults == None:
-        for key1 in benchmarks.keys():
-            meandict = benchmarks[key1]['mean']
-            for kv in sorted(meandict.keys()):
-                table_row += '<td>%g</td>\n' % round(meandict[kv], 2)
-            break
+    if crash != None:
+        for i in range(test_count):
+            table_row += '<td><span class="crash node">C</span></td>\n'
     else:
-        for key in benchmarks.keys():
-            if key not in prevResults: continue
-            means1 = benchmarks[key]['mean']
-            means2 = prevResults[key]['mean']
-            std1 = benchmarks[key]['std']
-            std2 = benchmarks[key]['std']
-            for testkey in sorted(means1.keys()):
-                testval = '<span class="node nochange">~</span>'
-                if (means1[testkey] + 10 * std1[testkey]) < (means2[testkey] - 10 * std2[testkey]):
-                    testval = '<span class="node better3">+++</span>'
-                elif (means1[testkey] + 5 * std1[testkey]) < (means2[testkey] - 5 * std2[testkey]):
-                    testval = '<span class="node better2">++</span>'
-                elif (means1[testkey] + std1[testkey]) < (means2[testkey] - std2[testkey]):
-                    testval = '<span class="node better">+</span>'
-                elif (means2[testkey] + std2[testkey]) < (means1[testkey] - std1[testkey]):
-                    testval = '<span class="node worse">x</span>'
-                elif (means2[testkey] + 5 * std2[testkey]) < (means1[testkey] - 5 * std1[testkey]):
-                    testval = '<span class="node worse2">xx</span>'
-                elif (means2[testkey] + 10 * std2[testkey]) < (means1[testkey] - 10 * std1[testkey]):
-                    testval = '<span class="node worse3">xxx</span>'
-                table_row += '<td>%s</td>\n' % testval
-            break
+        if prevResults == None:
+            for key1 in benchmarks.keys():
+                meandict = benchmarks[key1]['mean']
+                for kv in sorted(meandict.keys()):
+                    table_row += '<td>%g</td>\n' % round(meandict[kv], 2)
+                break
+        else:
+            for key in benchmarks.keys():
+                if key not in prevResults: continue
+                means1 = benchmarks[key]['mean']
+                means2 = prevResults[key]['mean']
+                std1 = benchmarks[key]['std']
+                std2 = benchmarks[key]['std']
+                for testkey in sorted(means1.keys()):
+                    testval = '<span class="node nochange">~</span>'
+                    if means1[testkey] < 0:
+                        testval = '<span class="node crash">C</span>'
+                        means1[testkey] = means2[testkey]
+                        std1[testkey] = std2[testkey]
+                    elif (means1[testkey] + 10 * std1[testkey]) < (means2[testkey] - 10 * std2[testkey]):
+                        testval = '<span class="node better3">+++</span>'
+                    elif (means1[testkey] + 5 * std1[testkey]) < (means2[testkey] - 5 * std2[testkey]):
+                        testval = '<span class="node better2">++</span>'
+                    elif (means1[testkey] + std1[testkey]) < (means2[testkey] - std2[testkey]):
+                        testval = '<span class="node better">+</span>'
+                    elif (means2[testkey] + std2[testkey]) < (means1[testkey] - std1[testkey]):
+                        testval = '<span class="node worse">x</span>'
+                    elif (means2[testkey] + 5 * std2[testkey]) < (means1[testkey] - 5 * std1[testkey]):
+                        testval = '<span class="node worse2">xx</span>'
+                    elif (means2[testkey] + 10 * std2[testkey]) < (means1[testkey] - 10 * std1[testkey]):
+                        testval = '<span class="node worse3">xxx</span>'
+                    table_row += '<td>%s</td>\n' % testval
+                break
 
     table_row += '</tr>'
 
     table_rows.append(table_row)
 
-    prevResults = benchmarks
+    if not crash:
+        prevResults = benchmarks
 
 table_rows.reverse()
 for row in table_rows:
