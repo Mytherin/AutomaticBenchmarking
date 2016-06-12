@@ -185,7 +185,7 @@ def run_test(branch, revision, date):
     result_file.close()
 
     # copy the files to the web server machine thingy
-    os.system('scp %s lab05:/export/data1/testweb/web/chronos/results' % result_file_name)
+    os.system('scp %s lab05:/export/data1/testweb/web/chronos/results' % os.path.join(basedir, result_file_name))
     os.system("ssh lab05 'cp /export/data1/testweb/web/chronos/results/%s /export/data1/testweb/web/chronos/results/%s && cd /export/data1/testweb/web/chronos && python generate.py'" % (result_file_name, "%s.%s" % monetdb.name(), branch))
 
 initial_setup()
