@@ -1,5 +1,5 @@
 
-base_revision = 'f8d19a6c2a88'
+base_revision = '501372bf12c0'
 
 import sqlite3
 

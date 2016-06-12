@@ -2,6 +2,7 @@
 import monetdb
 import versioncontrol
 import tpch
+import bash
 
 import os
 import sys
@@ -18,17 +19,20 @@ c = conn.cursor();
 c.execute('SELECT currentrevision FROM revision');
 results = c.fetchall()
 
+syscalls_log = open('syscalls.txt', 'w+')
+log_file = open('logs.txt', 'w+')
+
 current_revision = results[0][0]
 
 basedir = os.getcwd()
 
 def initial_setup():
     # generate tpch code
-    tpch.generate(basedir)
+    tpch.generate(basedir, syscalls_log)
 
 def run_test(branch, revision, date):
     dt = dateutil.parser.parse(date)
-    monetdb.force_shutdown_database()
+    monetdb.force_shutdown_database(syscalls_log)
 
     os.chdir(basedir)
     # setup parameters
@@ -39,14 +43,17 @@ def run_test(branch, revision, date):
     sourcedir = os.path.join(basedir, monetdb.folder())
     # if monetdb repository does not exist clone it
     if not os.path.exists(sourcedir):
-        os.system(versioncontrol.clone(tool, sourcedir, monetdb.repository()))
+        bash.system(syscalls_log, versioncontrol.clone(tool, sourcedir, monetdb.repository()))
 
-    if not os.path.exists('results'):
-        os.mkdir('results')
+    print(revision)
 
     os.chdir(sourcedir)
     # update to revision
-    os.system(versioncontrol.update(tool, revision))
+    bash.system(syscalls_log, versioncontrol.update(tool, revision))
+    os.chdir(basedir)
+
+    if not os.path.exists('results'):
+        os.mkdir('results')
 
     compile_parameters = monetdb.compile_parameters()
     runtime_parameters = monetdb.runtime_parameters()
@@ -66,17 +73,17 @@ def run_test(branch, revision, date):
             cp_param = cp[1]
 
             # clear previous installation
-            os.system('rm -rf %s' % compiledir)
+            bash.system(syscalls_log, 'rm -rf %s' % compiledir)
 
             # install monetdb
             os.chdir(sourcedir)
             print(monetdb.compile(compiledir, cp_param))
-            res = os.system(monetdb.compile(compiledir, cp_param))
+            res = bash.system(syscalls_log, monetdb.compile(compiledir, cp_param))
             if res != 0:
                 raise Exception("Failed to compile MonetDB")
 
             # clear database
-            monetdb.clear(dbpath)
+            monetdb.clear(dbpath, syscalls_log)
 
             # start monetdb server
             monetdb.start_database(compiledir, dbpath, '')
@@ -84,7 +91,7 @@ def run_test(branch, revision, date):
             # wait for monetdb to start
             success = False
             for i in range(100):
-                res = os.system(monetdb.execute_statement(compiledir, "SELECT * FROM tables") + " &> /dev/null")
+                res = bash.system(syscalls_log, monetdb.execute_statement(compiledir, "SELECT * FROM tables") + " &> /dev/null")
                 if res == 0:
                     success = True
                     break
@@ -94,7 +101,7 @@ def run_test(branch, revision, date):
                 raise Exception("Failed to start server")
 
             # load ddl
-            res = os.system(monetdb.execute_file(compiledir, os.path.join(basedir, 'scripts', '%s.schema.sql' % monetdb.name())))
+            res = bash.system(syscalls_log, monetdb.execute_file(compiledir, os.path.join(basedir, 'scripts', '%s.schema.sql' % monetdb.name())))
             if res != 0:
                 raise Exception("Failed to load DDL")
 
@@ -107,11 +114,11 @@ def run_test(branch, revision, date):
             f.write(script.replace('_DIR_', os.path.join(basedir, 'TPCH', 'tpch', 'dbgen')))
             f.close()
 
-            res = os.system(monetdb.execute_file(compiledir, '/tmp/load.sql'))
+            res = bash.system(syscalls_log, monetdb.execute_file(compiledir, '/tmp/load.sql'))
             if res != 0:
                 raise Exception("Failed to load data")
 
-            monetdb.shutdown_database(compiledir)
+            monetdb.shutdown_database(compiledir, syscalls_log)
 
             for rp in runtime_parameters:
                 rp_name = rp[0]
@@ -127,7 +134,7 @@ def run_test(branch, revision, date):
                 # wait for monetdb to start
                 success = False
                 for i in range(100):
-                    res = os.system(monetdb.execute_statement(compiledir, "SELECT * FROM tables") + " &> /dev/null")
+                    res = bash.system(syscalls_log, monetdb.execute_statement(compiledir, "SELECT * FROM tables") + " &> /dev/null")
                     if res == 0:
                         success = True
                         break
@@ -137,6 +144,9 @@ def run_test(branch, revision, date):
                     raise Exception("Failed to start server")
 
                 # run the actual tests
+                log_file.write('Starting tests with parameters (Runtime: %s, Compilation: %s)\n' % (str(rp_name), str(cp_name)))
+                log_file.flush()
+
                 querydir = os.path.join(basedir, 'queries')
                 queries = os.listdir(querydir)
                 queries.sort()
@@ -145,14 +155,14 @@ def run_test(branch, revision, date):
                         execute_query = monetdb.execute_file(compiledir, os.path.join(querydir, query))
                         # warmup
                         for i in range(2):
-                            res = os.system(execute_query)
+                            res = bash.system(syscalls_log, execute_query)
                             if res != 0:
                                 raise Exception("Failed to execute query %s" % query)
 
                         times = []
                         for i in range(5):
                             start = time.time()
-                            res = os.system(execute_query)
+                            res = bash.system(syscalls_log, execute_query)
                             end = time.time()
                             if res != 0:
                                 raise Exception("Failed to execute query %s" % query)
@@ -160,16 +170,22 @@ def run_test(branch, revision, date):
                             result_file.write('%s-run-%d:%g\n' % (query, i, end - start))
                         result_file.write('%s-mean:%g\n' % (query, numpy.mean(times)))
                         result_file.write('%s-std:%g\n' % (query, numpy.std(times)))
-                        print('Query %s completed in ' % query, numpy.mean(times))
+                        log_file.write('Query %s completed in %g\n' % (query, numpy.mean(times)))
+                        log_file.flush()
                     except:
                         result_file.write('%s-fail:execute\n' % query)
+                        log_file.write('Failed to execute query %s\n' % (query,))
+                        log_file.flush()
 
-                monetdb.shutdown_database(compiledir)
+                monetdb.shutdown_database(compiledir, syscalls_log)
                 result_file.write('endresults:\n')
                 result_file.write('endresultblock:\n')
 
     except:
         exception_message = sys.exc_info()[1].message.lower()
+        log_file.write('Exception: %s\n' % (exception_message,))
+        log_file.flush()
+        print(exception_message)
         if 'compile' in exception_message:
             result_file.write('fail:compile\n')
         elif 'start server' in exception_message:
@@ -185,12 +201,10 @@ def run_test(branch, revision, date):
     result_file.close()
 
     # copy the files to the web server machine thingy
-    os.system('scp %s lab05:/export/data1/testweb/web/chronos/results' % os.path.join(basedir, result_file_name))
-    os.system("ssh lab05 'cp /export/data1/testweb/web/chronos/results/%s /export/data1/testweb/web/chronos/results/%s && cd /export/data1/testweb/web/chronos && python generate.py'" % (result_file_name, "%s.%s" % monetdb.name(), branch))
+    bash.system(syscalls_log, 'scp %s lab05:/export/data1/testweb/web/chronos/results' % (os.path.join(basedir, result_file_name)))
+    bash.system(syscalls_log, "ssh lab05 'cp /export/data1/testweb/web/chronos/%s /export/data1/testweb/web/chronos/results/%s && cd /export/data1/testweb/web/chronos && python generate.py'" % (result_file_name, "%s.%s" % (monetdb.name(), branch)))
 
 initial_setup()
-
-
 
 while True:
     # get new revisions to run
@@ -201,10 +215,10 @@ while True:
     sourcedir = os.path.join(basedir, monetdb.folder())
     # if monetdb repository does not exist clone it
     if not os.path.exists(sourcedir):
-        os.system(versioncontrol.clone(tool, sourcedir, monetdb.repository()))
+        bash.system(syscalls_log, versioncontrol.clone(tool, sourcedir, monetdb.repository()))
 
     os.chdir(sourcedir)
-    os.system(versioncontrol.pull(tool))
+    bash.system(syscalls_log, versioncontrol.pull(tool))
 
     history = os.popen(versioncontrol.history(tool))
     revisions = []
@@ -227,18 +241,14 @@ while True:
             date = line.split(':', 1)[1].strip()
 
     for revision in sorted(revisions, key=lambda x: x[2]):
+        log_file.write("Testing Revision\n%s\n\n" % str(revision))
+        log_file.flush()
         run_test(revision[3], revision[0], revision[1])
-        c.execute('UPDATE revision SET currentrevision=?', (current_revision,))
+        c.execute('UPDATE revision SET currentrevision=?', (revision[0],))
         conn.commit()
 
     time.sleep(5)
     
 
-#run_test('default', '1bfd244713e3', 'Fri Jun 10 09:27:20 2016 +0200')
-#run_test('default', '9fda1be9c35f', 'Thu Jun 09 14:57:08 2016 +0200')
-
-
-
-
-
-
+log_file.close()
+syscalls_log.close()

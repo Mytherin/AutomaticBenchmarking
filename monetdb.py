@@ -1,4 +1,5 @@
 
+import bash
 import os
 import subprocess
 import time
@@ -40,9 +41,8 @@ def server(target_dir, db_path, runtime_parameter):
 def client(target_dir):
     return monetdb_client % target_dir
 
-def clear(db_path):
-    print('rm -rf %s' % db_path)
-    os.system('rm -rf %s' % db_path)
+def clear(db_path, syscalls_log):
+    bash.system(syscalls_log, 'rm -rf %s' % db_path)
 
 def branches():
     return [branch.lower().strip() for branch in monetdb_branches]
@@ -59,12 +59,12 @@ def compile(target_dir, parameters):
 def start_database(target_dir, db_path, runtime_parameter):
     subprocess.Popen(filter(None, server(target_dir, db_path, runtime_parameter).split(' ')))
 
-def shutdown_database(target_dir):
-    os.system('killall mserver5')
+def shutdown_database(target_dir, syscalls_log):
+    bash.system(syscalls_log, 'killall mserver5')
     time.sleep(10) #hacky
 
-def force_shutdown_database():
-    os.system('killall -9 mserver5')
+def force_shutdown_database(syscalls_log):
+    bash.system(syscalls_log, 'killall -9 mserver5')
 
 def execute_statement(target_dir, statement, silent=True):
     return "%s -s \"%s\"%s" % (client(target_dir), statement, " &>/dev/null" if silent else "")
