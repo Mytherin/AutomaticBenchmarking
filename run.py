@@ -32,8 +32,8 @@ def run_test(branch, revision, date):
 
     os.chdir(basedir)
     # setup parameters
-    dbpath = '/tmp/tmpdb'
-    compiledir = '/tmp/build'
+    dbpath = '/scratch/raasveld/database'
+    compiledir = '/scratch/raasveld/build'
     tool = monetdb.versioncontrol()
 
     sourcedir = os.path.join(basedir, monetdb.folder())
@@ -44,13 +44,14 @@ def run_test(branch, revision, date):
     if not os.path.exists('results'):
         os.mkdir('results')
 
+    os.chdir(sourcedir)
     # update to revision
     os.system(versioncontrol.update(tool, revision))
 
     compile_parameters = monetdb.compile_parameters()
     runtime_parameters = monetdb.runtime_parameters()
 
-    result_file_name = 'results/%s.%s.%s' % (monetdb.name(), calendar.timegm(dt.timetuple()), revision)
+    result_file_name = 'results/%s.%s.%s.%s' % (monetdb.name(), branch, calendar.timegm(dt.timetuple()), revision)
     result_file = open(result_file_name, 'w+')
     result_file.write('database:%s\n' % monetdb.displayname())
     result_file.write('branch:%s\n' % branch)
@@ -156,6 +157,7 @@ def run_test(branch, revision, date):
                             if res != 0:
                                 raise Exception("Failed to execute query %s" % query)
                             times.append(end - start)
+                            result_file.write('%s-run-%d:%g\n' % (query, i, end - start))
                         result_file.write('%s-mean:%g\n' % (query, numpy.mean(times)))
                         result_file.write('%s-std:%g\n' % (query, numpy.std(times)))
                         print('Query %s completed in ' % query, numpy.mean(times))
@@ -184,15 +186,17 @@ def run_test(branch, revision, date):
 
     # copy the files to the web server machine thingy
     os.system('scp %s lab05:/export/data1/testweb/web/chronos/results' % result_file_name)
-    os.system("ssh lab05 'cd /export/data1/testweb/web/chronos && python generate.py'")
+    os.system("ssh lab05 'cp /export/data1/testweb/web/chronos/results/%s /export/data1/testweb/web/chronos/results/%s && cd /export/data1/testweb/web/chronos && python generate.py'" % (result_file_name, "%s.%s" % monetdb.name(), branch))
 
 initial_setup()
+
 
 
 while True:
     # get new revisions to run
     os.chdir(basedir)
     tool = monetdb.versioncontrol()
+    tested_branches = monetdb.branches()
 
     sourcedir = os.path.join(basedir, monetdb.folder())
     # if monetdb repository does not exist clone it
@@ -204,15 +208,15 @@ while True:
 
     history = os.popen(versioncontrol.history(tool))
     revisions = []
-    branch = None
+    branch = 'default'
     revision = None
     date = None
     for line in history:
         if len(line.strip()) == 0:
-            if branch == None and revision != None:
+            if branch.strip().lower() in tested_branches and revision != None:
                 dt = dateutil.parser.parse(date)
-                revisions.append((revision, date, calendar.timegm(dt.timetuple())))
-            branch = None
+                revisions.append((revision, date, calendar.timegm(dt.timetuple()), branch))
+            branch = 'default'
         elif 'branch:' in line:
             branch = line.split(':')[1].strip()
         elif 'changeset:' in line:
@@ -223,7 +227,7 @@ while True:
             date = line.split(':', 1)[1].strip()
 
     for revision in sorted(revisions, key=lambda x: x[2]):
-        run_test('default', revision[0], revision[1])
+        run_test(revision[3], revision[0], revision[1])
         c.execute('UPDATE revision SET currentrevision=?', (current_revision,))
         conn.commit()
 

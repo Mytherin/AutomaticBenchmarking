@@ -10,7 +10,7 @@ monetdb_name = 'monetdb'
 monetdb_displayname = 'MonetDB'
 monetdb_folder = 'MonetDB'
 monetdb_repository = 'http://dev.monetdb.org/hg/MonetDB/'
-monetdb_branches = ['default', 'Jun2016', 'python3udf']
+monetdb_branches = ['default', 'Jun2016', 'python3udf', 'cand', 'jit', 'leftmart', 'orderidx', 'Jul2015']
 monetdb_compile = './bootstrap && ./configure %s --prefix=%s && make clean && make install'
 monetdb_port = 51113
 monetdb_server = '%s/bin/mserver5 --dbpath=%s %s --set mapi_port=' + str(monetdb_port)
@@ -43,6 +43,9 @@ def client(target_dir):
 def clear(db_path):
     print('rm -rf %s' % db_path)
     os.system('rm -rf %s' % db_path)
+
+def branches():
+    return [branch.lower().strip() for branch in monetdb_branches]
 
 def compile_parameters():
     return monetdb_compile_parameters
